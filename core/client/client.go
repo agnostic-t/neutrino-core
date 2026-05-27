@@ -26,6 +26,7 @@ func NewClient(p local.Proxy, t transport.Client, o obfuscation.Obfuscator, l *s
 		proxy:     p,
 		transport: t,
 		obfs:      o,
+		logger:    l,
 	}
 }
 
