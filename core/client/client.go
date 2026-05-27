@@ -63,7 +63,7 @@ func (c *Client) handle(req local.Request) {
 	success := false
 	defer func() {
 		if !success {
-			req.Fail()
+			req.Fail(0x01)
 		}
 	}()
 
