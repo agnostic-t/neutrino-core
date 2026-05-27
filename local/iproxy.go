@@ -7,7 +7,7 @@ type Request interface {
 
 	Success(boundAddr string) (net.Conn, error)
 
-	Fail()
+	Fail(code int)
 }
 
 type Proxy interface {
