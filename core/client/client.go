@@ -86,7 +86,7 @@ func (c *Client) handle(req local.Request) {
 	}
 
 	obfsConn.SetDeadline(time.Now().Add(5 * time.Second))
-	if err := c.hsher.ReadHandshake(obfsConn, req.Target()); err != nil {
+	if err := c.hsher.WriteHandshake(obfsConn, req.Target()); err != nil {
 		c.logger.Error("Failed to read handshake", "error", err)
 		return
 	}
