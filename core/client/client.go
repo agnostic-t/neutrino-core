@@ -55,7 +55,8 @@ func (c *Client) Start(ctx context.Context) error {
 			}
 
 			c.logger.Error("Proxy accept", "error", err)
-			return err
+			// return err
+			continue
 		}
 
 		go c.handle(req)
