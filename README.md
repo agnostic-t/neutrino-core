@@ -18,6 +18,10 @@ Core consists of 4 modules:
  - `obfuscation`: Module for hiding neutrino traffic from IDS/DPI etc. (here goes cryptography too)
  - `transport`: Module for data-transport over network methods (UDP, TCP, ICMP, DNS queries, HTTP-based protos)
 
- ## Usage
+## Usage
 
- Nothing to see, in development
+This repository does not conatin any implementation of VPN based on core, but contains **examples** of how vpn should be written (in exmaples/client and examples/server)
+
+Some of implementations of the VPN on neutrino-core:
+
+- [Tau](https://github.com/agnostic-t/tau): very simple VPN, uses TCP, SOCKS5 and XOBFS
