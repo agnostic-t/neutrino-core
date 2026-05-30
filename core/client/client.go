@@ -2,13 +2,13 @@ package client
 
 import (
 	"context"
-	"encoding/binary"
 	"io"
 	"log/slog"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/agnostic-t/neutrino-core/handshake"
 	"github.com/agnostic-t/neutrino-core/local"
 	"github.com/agnostic-t/neutrino-core/obfuscation"
 	"github.com/agnostic-t/neutrino-core/transport"
@@ -19,14 +19,16 @@ type Client struct {
 	proxy     local.Proxy
 	transport transport.Client
 	obfs      obfuscation.Obfuscator
+	hsher     handshake.HandshakeHandler
 }
 
-func NewClient(p local.Proxy, t transport.Client, o obfuscation.Obfuscator, l *slog.Logger) *Client {
+func NewClient(p local.Proxy, t transport.Client, o obfuscation.Obfuscator, h handshake.HandshakeHandler, l *slog.Logger) *Client {
 	return &Client{
 		proxy:     p,
 		transport: t,
 		obfs:      o,
 		logger:    l,
+		hsher:     h,
 	}
 }
 
@@ -84,7 +86,7 @@ func (c *Client) handle(req local.Request) {
 	}
 
 	obfsConn.SetDeadline(time.Now().Add(5 * time.Second))
-	if err := writeHandshake(obfsConn, req.Target()); err != nil {
+	if err := c.hsher.ReadHandshake(obfsConn, req.Target()); err != nil {
 		c.logger.Error("Failed to read handshake", "error", err)
 		return
 	}
@@ -99,19 +101,6 @@ func (c *Client) handle(req local.Request) {
 	success = true
 	localConn, _ := req.Success(obfsConn.LocalAddr().String())
 	c.relay(localConn, obfsConn)
-}
-
-func writeHandshake(w io.Writer, target string) error {
-	targetBytes := []byte(target)
-	lenBuf := make([]byte, 2)
-	binary.BigEndian.PutUint16(lenBuf, uint16(len(targetBytes)))
-
-	if _, err := w.Write(lenBuf); err != nil {
-		return err
-	}
-
-	_, err := w.Write(targetBytes)
-	return err
 }
 
 func (c *Client) relay(left, right net.Conn) {

@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
-	"encoding/binary"
 	"io"
 	"log/slog"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/agnostic-t/neutrino-core/handshake"
 	"github.com/agnostic-t/neutrino-core/obfuscation"
 	"github.com/agnostic-t/neutrino-core/transport"
 )
@@ -18,13 +18,15 @@ type Server struct {
 
 	transport transport.Server
 	obfs      obfuscation.Obfuscator
+	hsher     handshake.HandshakeHandler
 }
 
-func NewServer(t transport.Server, o obfuscation.Obfuscator, l *slog.Logger) *Server {
+func NewServer(t transport.Server, o obfuscation.Obfuscator, h handshake.HandshakeHandler, l *slog.Logger) *Server {
 	return &Server{
 		logger:    l,
 		transport: t,
 		obfs:      o,
+		hsher:     h,
 	}
 }
 
@@ -68,7 +70,7 @@ func (s *Server) handle(rawConn net.Conn) {
 	}
 
 	obfsConn.SetDeadline(time.Now().Add(5 * time.Second))
-	target, err := readHandshake(obfsConn)
+	target, err := s.hsher.ReadHandshake(obfsConn)
 	if err != nil {
 		s.logger.Error("Failed to perform handshake", "error", err)
 		return
@@ -113,19 +115,4 @@ func (s *Server) relay(left, right net.Conn) {
 	}()
 
 	wg.Wait()
-}
-
-func readHandshake(r io.Reader) (string, error) {
-	lenBuf := make([]byte, 2)
-	if _, err := io.ReadFull(r, lenBuf); err != nil {
-		return "", err
-	}
-	targetLen := binary.BigEndian.Uint16(lenBuf)
-
-	targetBuf := make([]byte, targetLen)
-	if _, err := io.ReadFull(r, targetBuf); err != nil {
-		return "", err
-	}
-
-	return string(targetBuf), nil
 }
