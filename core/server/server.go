@@ -81,12 +81,12 @@ func (s *Server) handle(rawConn net.Conn) {
 
 	targetConn, err := net.Dial("tcp", target)
 	if err != nil {
-		obfsConn.Write([]byte{0x01})
+		s.hsher.Failure(obfsConn)
 		return
 	}
 	defer targetConn.Close()
 
-	obfsConn.Write([]byte{0x00})
+	s.hsher.Success(obfsConn)
 	s.relay(obfsConn, targetConn)
 }
 

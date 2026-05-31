@@ -91,13 +91,13 @@ func (c *Client) handle(req local.Request) {
 		c.logger.Error("Failed to read handshake", "error", err)
 		return
 	}
-	obfsConn.SetDeadline(time.Time{})
 
-	respBuf := make([]byte, 1)
-	if _, err := io.ReadFull(obfsConn, respBuf); err != nil || respBuf[0] != 0x00 {
+	obfsConn.SetDeadline(time.Now().Add(5 * time.Second))
+	if c.hsher.ReadStatus(obfsConn) {
 		c.logger.Error("VPN server refused to connect to the target", "error", err)
 		return
 	}
+	obfsConn.SetDeadline(time.Time{})
 
 	success = true
 	localConn, _ := req.Success(obfsConn.LocalAddr().String())
