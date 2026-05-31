@@ -93,7 +93,7 @@ func (c *Client) handle(req local.Request) {
 	}
 
 	obfsConn.SetDeadline(time.Now().Add(5 * time.Second))
-	if c.hsher.ReadStatus(obfsConn) {
+	if !c.hsher.ReadStatus(obfsConn) {
 		c.logger.Error("VPN server refused to connect to the target", "error", err)
 		return
 	}
