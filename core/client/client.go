@@ -10,6 +10,7 @@ import (
 
 	"github.com/agnostic-t/neutrino-core/handshake"
 	"github.com/agnostic-t/neutrino-core/local"
+	"github.com/agnostic-t/neutrino-core/nmux"
 	"github.com/agnostic-t/neutrino-core/obfuscation"
 	"github.com/agnostic-t/neutrino-core/transport"
 )
@@ -20,15 +21,30 @@ type Client struct {
 	transport transport.Client
 	obfs      obfuscation.Obfuscator
 	hsher     handshake.HandshakeHandler
+
+	mu      sync.Mutex
+	muxer   nmux.Multiplexer
+	session nmux.MultiplexerSession
+
+	muxerEnabled bool
 }
 
-func NewClient(p local.Proxy, t transport.Client, o obfuscation.Obfuscator, h handshake.HandshakeHandler, l *slog.Logger) *Client {
+func NewClient(
+	p local.Proxy,
+	t transport.Client,
+	o obfuscation.Obfuscator,
+	h handshake.HandshakeHandler,
+	m nmux.Multiplexer,
+	muxerEnabled bool,
+	l *slog.Logger,
+) *Client {
 	return &Client{
 		proxy:     p,
 		transport: t,
 		obfs:      o,
 		logger:    l,
 		hsher:     h,
+		muxer:     m,
 	}
 }
 
@@ -63,6 +79,34 @@ func (c *Client) Start(ctx context.Context) error {
 	}
 }
 
+func (c *Client) getStream() (net.Conn, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.session == nil || c.session.IsClosed() {
+		c.logger.Info("[mux] Dialing new connection to VPN server...")
+		servConn, err := c.transport.Dial()
+		if err != nil {
+			return nil, err
+		}
+
+		obfsConn, err := c.obfs.WrapConnTo(servConn)
+		if err != nil {
+			servConn.Close()
+			return nil, err
+		}
+
+		session, err := c.muxer.Client(obfsConn)
+		if err != nil {
+			obfsConn.Close()
+			return nil, err
+		}
+		c.session = session
+	}
+
+	return c.session.Open()
+}
+
 func (c *Client) handle(req local.Request) {
 	success := false
 	defer func() {
@@ -73,35 +117,53 @@ func (c *Client) handle(req local.Request) {
 
 	c.logger.Debug("New request", "target", req.Target())
 
-	servConn, err := c.transport.Dial()
+	var servConn net.Conn
+	var err error
+	if c.muxerEnabled {
+		servConn, err = c.getStream()
+	} else {
+		servConn, err = c.transport.Dial()
+	}
+
 	if err != nil {
 		c.logger.Error("Failed to connect to VPN", "error", err)
 		return
 	}
+
 	defer servConn.Close()
 
-	obfsConn, err := c.obfs.WrapConnTo(servConn)
-	if err != nil {
-		c.logger.Error("Failed to establish obfuscated connection", "error", err)
-		return
+	cont_conn := servConn
+	if !c.muxerEnabled {
+		cont_conn, err = c.obfs.WrapConnTo(servConn)
+		if err != nil {
+			c.logger.Error("Failed to establish obfuscated connection", "error", err)
+			return
+		}
 	}
 
-	obfsConn.SetDeadline(time.Now().Add(5 * time.Second))
-	if err := c.hsher.WriteHandshake(obfsConn, req.Target()); err != nil {
+	cont_conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if err := c.hsher.WriteHandshake(cont_conn, req.Target()); err != nil {
 		c.logger.Error("Failed to read handshake", "error", err)
 		return
 	}
 
-	obfsConn.SetDeadline(time.Now().Add(5 * time.Second))
-	if !c.hsher.ReadStatus(obfsConn) {
+	cont_conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if !c.hsher.ReadStatus(cont_conn) {
 		c.logger.Error("VPN server refused to connect to the target", "error", err)
 		return
 	}
-	obfsConn.SetDeadline(time.Time{})
+	cont_conn.SetDeadline(time.Time{})
 
 	success = true
-	localConn, _ := req.Success(obfsConn.LocalAddr().String())
-	c.relay(localConn, obfsConn)
+	var saddr string
+	if !c.muxerEnabled {
+		saddr = cont_conn.LocalAddr().String()
+	} else {
+		saddr = "mux-stream"
+	}
+
+	localConn, _ := req.Success(saddr)
+	c.relay(localConn, cont_conn)
 }
 
 func (c *Client) relay(left, right net.Conn) {
