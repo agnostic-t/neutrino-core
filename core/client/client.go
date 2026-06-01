@@ -39,12 +39,13 @@ func NewClient(
 	l *slog.Logger,
 ) *Client {
 	return &Client{
-		proxy:     p,
-		transport: t,
-		obfs:      o,
-		logger:    l,
-		hsher:     h,
-		muxer:     m,
+		proxy:        p,
+		transport:    t,
+		obfs:         o,
+		logger:       l,
+		hsher:        h,
+		muxer:        m,
+		muxerEnabled: muxerEnabled,
 	}
 }
 
@@ -147,7 +148,7 @@ func (c *Client) handle(req local.Request) {
 		return
 	}
 
-	cont_conn.SetDeadline(time.Now().Add(5 * time.Second))
+	cont_conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if !c.hsher.ReadStatus(cont_conn) {
 		c.logger.Error("VPN server refused to connect to the target", "error", err)
 		return
