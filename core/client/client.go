@@ -143,7 +143,7 @@ func (c *Client) handle(req local.Request) {
 	}
 
 	cont_conn.SetDeadline(time.Now().Add(5 * time.Second))
-	if err := c.hsher.WriteHandshake(cont_conn, req.Target()); err != nil {
+	if err := c.hsher.WriteHandshake(cont_conn, req.Target(), req.Proto()); err != nil {
 		c.logger.Error("Failed to read handshake", "error", err)
 		return
 	}
@@ -161,6 +161,10 @@ func (c *Client) handle(req local.Request) {
 		saddr = cont_conn.LocalAddr().String()
 	} else {
 		saddr = "mux-stream"
+	}
+
+	if req.Proto() == "udp" {
+		cont_conn = nmux.NewUdpFramer(cont_conn)
 	}
 
 	localConn, _ := req.Success(saddr)

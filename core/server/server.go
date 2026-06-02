@@ -70,20 +70,21 @@ func (s *Server) Start(ctx context.Context) error {
 			return err
 		}
 
-		if s.muxerEnabled {
-			go s.handleConnection(rawConn)
-		} else {
-			go s.handle(rawConn)
-		}
+		go s.handleRawConn(rawConn)
 	}
 }
 
-func (s *Server) handleConnection(rawConn net.Conn) {
+func (s *Server) handleRawConn(rawConn net.Conn) {
 	defer rawConn.Close()
 
 	obfsConn, err := s.obfs.WrapConnFrom(rawConn)
 	if err != nil {
 		s.logger.Error("Failed to establish obfuscated connection", "error", err)
+		return
+	}
+
+	if !s.muxerEnabled {
+		s.processPayloadConn(obfsConn)
 		return
 	}
 
@@ -100,62 +101,38 @@ func (s *Server) handleConnection(rawConn net.Conn) {
 			s.logger.Debug("Session closed or stream accept error", "error", err)
 			return
 		}
-		go s.handleStream(stream)
+
+		go s.processPayloadConn(stream)
 	}
 }
 
-func (s *Server) handleStream(stream net.Conn) {
-	defer stream.Close()
+func (s *Server) processPayloadConn(conn net.Conn) {
+	defer conn.Close()
 
-	stream.SetDeadline(time.Now().Add(5 * time.Second))
-	target, err := s.hsher.ReadHandshake(stream)
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	proto, target, err := s.hsher.ReadHandshake(conn)
 	if err != nil {
 		s.logger.Error("Failed to perform handshake", "error", err)
 		return
 	}
-	stream.SetDeadline(time.Time{})
+	conn.SetDeadline(time.Time{})
 
 	s.logger.Debug("Client wants to connect", "dest", target)
 
-	targetConn, err := net.Dial("tcp", target)
+	targetConn, err := net.Dial(proto, target)
 	if err != nil {
-		s.hsher.Failure(stream)
+		s.hsher.Failure(conn)
 		return
 	}
 	defer targetConn.Close()
 
-	s.hsher.Success(stream)
-	s.relay(stream, targetConn)
-}
+	s.hsher.Success(conn)
 
-func (s *Server) handle(rawConn net.Conn) {
-	defer rawConn.Close()
-
-	obfsConn, err := s.obfs.WrapConnFrom(rawConn)
-	if err != nil {
-		s.logger.Error("Failed to establish obfuscated connection", "error", err)
-		return
+	if proto == "udp" {
+		conn = nmux.NewUdpFramer(conn)
 	}
 
-	obfsConn.SetDeadline(time.Now().Add(5 * time.Second))
-	target, err := s.hsher.ReadHandshake(obfsConn)
-	if err != nil {
-		s.logger.Error("Failed to perform handshake", "error", err)
-		return
-	}
-	obfsConn.SetDeadline(time.Time{})
-
-	s.logger.Debug("Client wants to connect", "dest", target)
-
-	targetConn, err := net.Dial("tcp", target)
-	if err != nil {
-		s.hsher.Failure(obfsConn)
-		return
-	}
-	defer targetConn.Close()
-
-	s.hsher.Success(obfsConn)
-	s.relay(obfsConn, targetConn)
+	s.relay(conn, targetConn)
 }
 
 func closeWriter(conn net.Conn) {

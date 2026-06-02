@@ -4,9 +4,8 @@ import "net"
 
 type Request interface {
 	Target() string
-
 	Success(boundAddr string) (net.Conn, error)
-
+	Proto() string
 	Fail(code int)
 }
 
