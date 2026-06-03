@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/agnostic-t/neutrino-core/handshake"
@@ -27,6 +28,8 @@ type Client struct {
 	session nmux.MultiplexerSession
 
 	muxerEnabled bool
+	flt          local.Filter
+	directIF     string
 }
 
 func NewClient(
@@ -35,6 +38,8 @@ func NewClient(
 	o obfuscation.Obfuscator,
 	h handshake.HandshakeHandler,
 	m nmux.Multiplexer,
+	f local.Filter,
+	directIF string,
 	muxerEnabled bool,
 	l *slog.Logger,
 ) *Client {
@@ -46,6 +51,8 @@ func NewClient(
 		hsher:        h,
 		muxer:        m,
 		muxerEnabled: muxerEnabled,
+		flt:          f,
+		directIF:     directIF,
 	}
 }
 
@@ -116,7 +123,25 @@ func (c *Client) handle(req local.Request) {
 		}
 	}()
 
-	c.logger.Debug("New request", "target", req.Target())
+	target := req.Target()
+
+	if c.flt != nil {
+		// c.logger.Info("Calling filter on", "target", target)
+		action := c.flt.Filter(target)
+
+		if action == local.RouteBlock {
+			c.logger.Info("Connection BLOCKED by filter", "target", target)
+			return
+		}
+
+		if action == local.RouteDirect {
+			c.logger.Info("Routing DIRECT", "target", target)
+			success = c.handleDirect(req)
+			return
+		}
+	}
+
+	// c.logger.Info("New request", "target", req.Target())
 
 	var servConn net.Conn
 	var err error
@@ -143,7 +168,7 @@ func (c *Client) handle(req local.Request) {
 	}
 
 	cont_conn.SetDeadline(time.Now().Add(5 * time.Second))
-	if err := c.hsher.WriteHandshake(cont_conn, req.Target(), req.Proto()); err != nil {
+	if err := c.hsher.WriteHandshake(cont_conn, target, req.Proto()); err != nil {
 		c.logger.Error("Failed to read handshake", "error", err)
 		return
 	}
@@ -180,6 +205,37 @@ func (c *Client) handle(req local.Request) {
 
 	// fmt.Println("Starting relay, proto:", req.Proto())
 	c.relay(localConn, cont_conn)
+}
+
+func (c *Client) handleDirect(req local.Request) bool {
+	dialer := &net.Dialer{
+		Timeout: 5 * time.Second,
+		Control: func(network, address string, rawConn syscall.RawConn) error {
+			return rawConn.Control(func(fd uintptr) {
+				syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, c.directIF)
+			})
+		},
+	}
+
+	directConn, err := dialer.Dial(req.Proto(), req.Target())
+	if err != nil {
+		c.logger.Error("Direct dial failed", "target", req.Target(), "error", err)
+		return false
+	}
+
+	localConn, err := req.Success(directConn.LocalAddr().String())
+	if err != nil {
+		directConn.Close()
+		c.logger.Error("Failed to write success for direct routing", "error", err)
+		return false
+	}
+	if localConn == nil {
+		directConn.Close()
+		return false
+	}
+
+	c.relay(localConn, directConn)
+	return true
 }
 
 func (c *Client) relay(left, right net.Conn) {
