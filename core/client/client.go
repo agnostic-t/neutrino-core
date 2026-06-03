@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -167,11 +168,18 @@ func (c *Client) handle(req local.Request) {
 		cont_conn = nmux.NewUdpFramer(cont_conn)
 	}
 
-	localConn, _ := req.Success(saddr)
-	if localConn == nil {
+	localConn, err := req.Success(saddr)
+	if err != nil {
+		c.logger.Error("Failed to write success", "error", err)
 		return
 	}
 
+	if localConn == nil {
+		c.logger.Warn("LConn nil, proto:", "proto", req.Proto())
+		return
+	}
+
+	fmt.Println("Starting relay, proto:", req.Proto())
 	c.relay(localConn, cont_conn)
 }
 
