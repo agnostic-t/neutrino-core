@@ -168,6 +168,10 @@ func (c *Client) handle(req local.Request) {
 	}
 
 	localConn, _ := req.Success(saddr)
+	if localConn == nil {
+		return
+	}
+
 	c.relay(localConn, cont_conn)
 }
 
