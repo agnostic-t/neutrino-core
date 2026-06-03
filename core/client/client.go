@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -179,7 +178,7 @@ func (c *Client) handle(req local.Request) {
 		return
 	}
 
-	fmt.Println("Starting relay, proto:", req.Proto())
+	// fmt.Println("Starting relay, proto:", req.Proto())
 	c.relay(localConn, cont_conn)
 }
 
