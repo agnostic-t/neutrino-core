@@ -1,5 +1,7 @@
 ![[logo]](./assets/logo.png)
 
+English | [Русский](./README_RU.md)
+
 # Neutrino project
 
 > The main task is to ensure open access to information resources for everyone
