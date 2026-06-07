@@ -2,29 +2,38 @@
 
 English | [Русский](./README_RU.md)
 
-# Neutrino project
+# The Neutrino Project
 
-> The main task is to ensure open access to information resources for everyone
+> The main goal is to ensure open access to information for all
 
-This module is a core of the project, means that it is a basement for all neutrino-realated products.
+This repository is the core of the project, that is, the basis for all neutrino projects.
 
-Repository includes interfaces and main server/client that are based on these interfaces.
+The repository consists mainly of interfaces for creating VPN modules, as well as a common client and server (they use all interfaces from the core and accept their implementations as input).
 
-Other neutrino-... repositories consist of implementations of `core`, `local`, `obfuscation`, `handshake` and `transport` modules.
+Because of this architecture, creating your own VPN based on neutrino core boils down to implementing the necessary interfaces from the core.
 
 ## Modules
 
-Core consists of 5 modules:
- - `core`: Module for generic clients/servers
- - `handshake`: Module for sharing host target between client and server
- - `local`: Module for local proxies on client side (like SOCKS5, HTTP or HTTPS proxy)
- - `obfuscation`: Module for hiding neutrino traffic from IDS/DPI etc. (here goes cryptography too)
- - `transport`: Module for data-transport over network methods (UDP, TCP, ICMP, DNS queries, HTTP-based protos)
+There are 6 modules in total:
+
+- `core`: The main client and server, they are responsible for the communication of all other modules with each other
+- `transport`: A transport module that sets the method of transmitting information over the network. 
+- `obfuscation`: Traffic encryption/obfuscation module. Applies to outgoing and incoming packets.
+- `handshake`: A module for transferring the connection target from the client to the server
+- `local`: A module for connecting a device to a VPN. Supplies local proxies (for example SOCKS5) and passes the connection target to the handshake module 
+- `nmux`: Optional module, needed for multiplexing transport traffic
 
 ## Usage
 
-This repository does not conatin any implementation of VPN based on core, but contains **examples** of how vpn should be written (in exmaples/client and examples/server)
+This repository should only be used in combination with the implementation of all 5 modules (that is, excluding `core`, since it is not a module with interfaces).
 
-Some of implementations of the VPN on neutrino-core:
+Repositories with examples of module implementation:
 
-- [Tau](https://github.com/agnostic-t/tau): very simple VPN, uses TCP, SOCKS5 and XOBFS
+1) obfs: [neutrino-obfs](https://github.com/agnostic-t/neutrino-obfs)
+2) handshake: [neutrino-handsh](https://github.com/agnostic-t/neutrino-handsh)
+3) local: [neutrino-lproxies](https://github.com/agnostic-t/neutrino-lproxies)
+4) transport: [neutrino-transport](https://github.com/agnostic-t/neutrino-transport)
+5) nmux: [neutrino-mux](https://github.com/agnostic-t/neutrino-mux)
+
+An example of using all the modules is:
+- [Tau](https://github.com/agnostic-t/tau ) a VPN project that makes full use of all the basic implementations (neutrino-...) modules and supports SOCKS5/TUN modes

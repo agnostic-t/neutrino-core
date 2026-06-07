@@ -4,36 +4,37 @@
 
 # The Neutrino Project
 
-> The main goal is to ensure open access to information for all
+> Главная задача - обеспечить открытый доступ к информации для всех
 
-This repository is the core of the project, that is, the basis for all neutrino projects.
+Этот репозиторий является ядром проекта, то есть основой для всех проектов neutrino.
 
-The repository consists mainly of interfaces for creating VPN modules, as well as a common client and server (they use all interfaces from the core and accept their implementations as input).
+Репозиторий состоит в основном из интерфейсов для создания модулей VPN, а также общего клиента и сервера (они используют все интерфейсы из ядра и принимают их реализации в качестве параметров).
 
-Because of this architecture, creating your own VPN based on neutrino core boils down to implementing the necessary interfaces from the core.
+Из-за такой архитектуры создание собственного VPN на базе neutrino core сводится к реализации необходимых интерфейсов из ядра.
 
-## Modules
+## Модули
 
-There are 6 modules in total:
+Всего 6 модулей:
 
-- `core`: The main client and server, they are responsible for the communication of all other modules with each other
-- `transport`: A transport module that sets the method of transmitting information over the network. 
-- `obfuscation`: Traffic encryption/obfuscation module. Applies to outgoing and incoming packets.
-- `handshake`: A module for transferring the connection target from the client to the server
-- `local`: A module for connecting a device to a VPN. Supplies local proxies (for example SOCKS5) and passes the connection target to the handshake module 
-- `nmux`: Optional module, needed for multiplexing transport traffic
+- `core`: Основные клиент и сервер, они отвечают за связь всех остальных модулей друг с другом
+- `transport`: Транспортный модуль, который устанавливает способ передачи информации по сети. 
+- `obfuscation`: Модуль шифрования/обфускации трафика. Применяется к исходящим и входящим пакетам.
+- `handshake`: модуль для передачи целевого соединения от клиента к серверу
+- `local`: модуль для подключения устройства к VPN. Предоставляет локальные прокси-серверы (например, SOCKS5) и передает цель подключения модулю `handshake` 
+- `nmux`: Опциональный модуль, необходимый для мультиплексирования транспортного трафика
 
-## Usage
+## Использование
 
-This repository should only be used in combination with the implementation of all 5 modules (that is, excluding `core`, since it is not a module with interfaces).
+Этот репозиторий надо использовать только в сочетании с реализацией всех 5 модулей (исключая `core`, т.к. он не имеет интерфейсов).
 
-Repositories with examples of module implementation:
+Репозитории с примерами реализации модулей:
 
-1) obfs: [neutrino-obfs](https://github.com/agnostic-t/neutrino-obfs)
-2) handshake: [neutrino-handsh](https://github.com/agnostic-t/neutrino-handsh)
-3) local: [neutrino-lproxies](https://github.com/agnostic-t/neutrino-lproxies)
+1) obfs: [нейтрино-obfs](https://github.com/agnostic-t/neutrino-obfs)
+2) handshake: [нейтрино-рукопожатие](https://github.com/agnostic-t/neutrino-handsh)
+3) local: [нейтрино-lproxies](https://github.com/agnostic-t/neutrino-lproxies)
 4) transport: [neutrino-transport](https://github.com/agnostic-t/neutrino-transport)
 5) nmux: [neutrino-mux](https://github.com/agnostic-t/neutrino-mux)
 
-An example of using all the modules is:
-- [Tau](https://github.com/agnostic-t/tau ) a VPN project that makes full use of all the basic implementations (neutrino-...) modules and supports SOCKS5/TUN modes
+Примером использования всех модулей является:
+
+- [Tau](https://github.com/agnostic-t/tau ) проект VPN, который полностью использует все базовые реализации (neutrino-...) модулей и поддерживает режимы SOCKS5/TUN
