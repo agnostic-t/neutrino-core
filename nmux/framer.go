@@ -35,3 +35,11 @@ func (f *UdpFramer) Write(b []byte) (int, error) {
 
 	return f.Conn.Write(b)
 }
+
+func (f *UdpFramer) CloseWrite() error {
+	if cw, ok := f.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+
+	return f.Conn.Close()
+}

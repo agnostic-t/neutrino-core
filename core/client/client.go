@@ -257,6 +257,14 @@ func (c *Client) handleDirect(req local.Request) bool {
 	return true
 }
 
+func closeWriter(conn net.Conn) {
+	if cw, ok := conn.(interface{ CloseWrite() error }); ok {
+		cw.CloseWrite()
+	} else {
+		conn.Close()
+	}
+}
+
 func (c *Client) relay(left, right net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -264,13 +272,13 @@ func (c *Client) relay(left, right net.Conn) {
 	go func() {
 		defer wg.Done()
 		io.Copy(left, right)
-		left.Close()
+		closeWriter(left)
 	}()
 
 	go func() {
 		defer wg.Done()
 		io.Copy(right, left)
-		right.Close()
+		closeWriter(right)
 	}()
 
 	wg.Wait()
