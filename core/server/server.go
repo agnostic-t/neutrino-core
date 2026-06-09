@@ -150,13 +150,13 @@ func (s *Server) relay(left, right net.Conn) {
 	go func() {
 		defer wg.Done()
 		io.Copy(left, right)
-		closeWriter(right)
+		closeWriter(left)
 	}()
 
 	go func() {
 		defer wg.Done()
 		io.Copy(right, left)
-		closeWriter(left)
+		closeWriter(right)
 	}()
 
 	wg.Wait()

@@ -92,27 +92,46 @@ func (c *Client) getStream() (net.Conn, error) {
 	defer c.mu.Unlock()
 
 	if c.session == nil || c.session.IsClosed() {
-		c.logger.Info("[mux] Dialing new connection to VPN server...")
-		servConn, err := c.transport.Dial()
-		if err != nil {
+		if err := c.reconnectSession(); err != nil {
 			return nil, err
 		}
-
-		obfsConn, err := c.obfs.WrapConnTo(servConn)
-		if err != nil {
-			servConn.Close()
-			return nil, err
-		}
-
-		session, err := c.muxer.Client(obfsConn)
-		if err != nil {
-			obfsConn.Close()
-			return nil, err
-		}
-		c.session = session
 	}
 
-	return c.session.Open()
+	stream, err := c.session.Open()
+	if err != nil {
+		c.logger.Warn("Failed to open mux stream, forcing session close", "error", err)
+		c.session.Close()
+		c.session = nil
+
+		if err := c.reconnectSession(); err != nil {
+			return nil, err
+		}
+		return c.session.Open()
+	}
+
+	return stream, nil
+}
+
+func (c *Client) reconnectSession() error {
+	c.logger.Info("[mux] Dialing new connection to VPN server...")
+	servConn, err := c.transport.Dial()
+	if err != nil {
+		return err
+	}
+
+	obfsConn, err := c.obfs.WrapConnTo(servConn)
+	if err != nil {
+		servConn.Close()
+		return err
+	}
+
+	session, err := c.muxer.Client(obfsConn)
+	if err != nil {
+		obfsConn.Close()
+		return err
+	}
+	c.session = session
+	return nil
 }
 
 func (c *Client) handle(req local.Request) {
