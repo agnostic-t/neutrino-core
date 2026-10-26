@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -13,6 +14,11 @@ import (
 	"github.com/agnostic-t/neutrino-core/obfuscation"
 	"github.com/agnostic-t/neutrino-core/transport"
 )
+
+// relayBufSize: 64 KiB. The default io.Copy buffer is 32 KiB, which is too
+// small for UDP framed packets (up to ~65 KiB payload) and causes
+// "buffer too small for packet" errors on the UDP path.
+const relayBufSize = 65535
 
 type Server struct {
 	logger *slog.Logger
@@ -59,6 +65,7 @@ func (s *Server) Start(ctx context.Context) error {
 		listener.Close()
 	}()
 
+	acceptFails := 0
 	for {
 		rawConn, err := listener.Accept()
 		if err != nil {
@@ -66,10 +73,31 @@ func (s *Server) Start(ctx context.Context) error {
 				return nil
 			}
 
-			s.logger.Error("Accept error", "error", err)
-			return err
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
+
+			// FIX: previously ANY transient accept error (e.g. EMFILE / too
+			// many open files) returned from Start, silently killing the
+			// whole inbound until manual restart. Now the error is logged
+			// and the accept loop continues with a growing backoff, matching
+			// the client behavior.
+			acceptFails++
+			s.logger.Error("Accept error, retrying", "error", err, "consecutive_fails", acceptFails)
+
+			backoff := time.Duration(acceptFails) * 200 * time.Millisecond
+			if backoff > time.Second {
+				backoff = time.Second
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(backoff):
+			}
+			continue
 		}
 
+		acceptFails = 0
 		go s.handleRawConn(rawConn)
 	}
 }
@@ -149,13 +177,15 @@ func (s *Server) relay(left, right net.Conn) {
 
 	go func() {
 		defer wg.Done()
-		io.Copy(left, right)
+		// FIX: dedicated 64 KiB buffer (see relayBufSize) instead of the
+		// 32 KiB io.Copy default, so large framed UDP packets fit.
+		io.CopyBuffer(left, right, make([]byte, relayBufSize))
 		closeWriter(left)
 	}()
 
 	go func() {
 		defer wg.Done()
-		io.Copy(right, left)
+		io.CopyBuffer(right, left, make([]byte, relayBufSize))
 		closeWriter(right)
 	}()
 

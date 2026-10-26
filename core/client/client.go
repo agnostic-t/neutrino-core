@@ -16,6 +16,11 @@ import (
 	"github.com/agnostic-t/neutrino-core/transport"
 )
 
+// relayBufSize: 64 KiB. The default io.Copy buffer is 32 KiB, which is too
+// small for UDP framed packets (up to ~65 KiB payload) and causes
+// "buffer too small for packet" errors on the UDP path.
+const relayBufSize = 65535
+
 type Client struct {
 	logger    *slog.Logger
 	proxy     local.Proxy
@@ -188,13 +193,20 @@ func (c *Client) handle(req local.Request) {
 
 	cont_conn.SetDeadline(time.Now().Add(5 * time.Second))
 	if err := c.hsher.WriteHandshake(cont_conn, target, req.Proto()); err != nil {
-		c.logger.Error("Failed to read handshake", "error", err)
+		// FIX: this was logged as "Failed to read handshake" although it is
+		// the WRITE side of the handshake, which made diagnostics confusing.
+		c.logger.Error("Failed to write handshake", "target", target, "error", err)
 		return
 	}
 
 	cont_conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if !c.hsher.ReadStatus(cont_conn) {
-		c.logger.Error("VPN server refused to connect to the target", "error", err)
+		// FIX: the old log line printed a stale/nil err ("error", err where
+		// err was always nil at this point), e.g. on a PSK mismatch it showed
+		// error=<nil>, hiding the real cause. Now the message points at the
+		// actual failure mode: unreadable/failed handshake status reply,
+		// typically a config mismatch (psk / mux / transport) with the server.
+		c.logger.Error("VPN server did not return a valid handshake status (check psk/trans/mux match with the server)", "target", target)
 		return
 	}
 	cont_conn.SetDeadline(time.Time{})
@@ -271,13 +283,15 @@ func (c *Client) relay(left, right net.Conn) {
 
 	go func() {
 		defer wg.Done()
-		io.Copy(left, right)
+		// FIX: dedicated 64 KiB buffer (see relayBufSize) instead of the
+		// 32 KiB io.Copy default, so large framed UDP packets fit.
+		io.CopyBuffer(left, right, make([]byte, relayBufSize))
 		closeWriter(left)
 	}()
 
 	go func() {
 		defer wg.Done()
-		io.Copy(right, left)
+		io.CopyBuffer(right, left, make([]byte, relayBufSize))
 		closeWriter(right)
 	}()
 
